@@ -1,3 +1,4 @@
+
 /**
  * Use this file to configure your truffle project. It's seeded with some
  * common settings for different networks and features like migrations,
@@ -18,13 +19,19 @@
  *
  */
 
-// const HDWalletProvider = require('@truffle/hdwallet-provider');
-// const infuraKey = "fj4jll3k.....";
-//
-// const fs = require('fs');
-// const mnemonic = fs.readFileSync(".secret").toString().trim();
+const HDWalletProvider = require('@truffle/hdwallet-provider');
+const fs = require('fs');
+// const mnemonic = fs.readFileSync("../demo/.secret").toString().trim();
+const mnemonic = fs.readFileSync("./.secret").toString().trim();
+const {BSCSCANAPIKEY} = require('./env.json');
 
 module.exports = {
+   plugins: [
+    'truffle-plugin-verify'
+  ],
+  api_keys: {
+    bscscan: BSCSCANAPIKEY
+  },
   /**
    * Networks define how you connect to your ethereum client and let you set the
    * defaults web3 uses to send transactions. If you don't specify one truffle
@@ -36,6 +43,46 @@ module.exports = {
    */
 
   networks: {
+    development: {
+      host: '127.0.0.1', // Localhost (default: none)
+      port: 8545, // Standard Ethereum port (default: none)
+      network_id: '57777',
+    },
+
+    ganache: {
+     host: "127.0.0.1",     // Localhost (default: none)
+     port: 7545,            // Standard Ethereum port (default: none)
+     network_id: "5777",       // Any network (default: none)
+    },
+
+    testnet: {
+      provider: () => new HDWalletProvider(mnemonic, `https://data-seed-prebsc-1-s1.binance.org:8545`),
+      network_id: 97,
+      confirmations: 10,
+      timeoutBlocks: 200,
+      skipDryRun: true
+    },
+    mainnet: {
+      provider: () => new HDWalletProvider(mnemonic, `https://bsc-dataseed1.binance.org`),
+      network_id: 56,
+      confirmations: 10,
+      timeoutBlocks: 200,
+      skipDryRun: true
+    },
+    goerli: {
+      provider: () => new HDWalletProvider(mnemonic, `wss://goerli.infura.io/ws/v3/30ed079d0921439598b010df473a4f1e`),
+      network_id: 5,
+      // confirmations: 10,
+      // timeoutBlocks: 200,
+      // skipDryRun: true
+    }, 
+    ethmainnet:{
+      provider: () => new HDWalletProvider(mnemonic, `wss://mainnet.infura.io/ws/v3/30ed079d0921439598b010df473a4f1e`),
+      network_id: 1,
+      confirmations: 10,
+      timeoutBlocks: 200,
+      skipDryRun: true
+    },
     // Useful for testing. The `development` name is special - truffle uses it by default
     // if it's defined here and no other network is specified at the command line.
     // You should run a client (like ganache-cli, geth or parity) in a separate terminal
@@ -82,15 +129,30 @@ module.exports = {
   // Configure your compilers
   compilers: {
     solc: {
-      // version: "0.5.1",    // Fetch exact version from solc-bin (default: truffle's version)
+      version: "0.6.6",    // Fetch exact version from solc-bin (default: truffle's version)
       // docker: true,        // Use "0.5.1" you've installed locally with docker (default: false)
-      // settings: {          // See the solidity docs for advice about optimization and evmVersion
-      //  optimizer: {
-      //    enabled: false,
-      //    runs: 200
-      //  },
-      //  evmVersion: "byzantium"
-      // }
+      settings: {
+      optimizer: {
+        enabled: true,
+        runs: 1,
+      },
+      evmVersion: "istanbul",
+      outputSelection: {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "evm.bytecode.object",
+            "evm.deployedBytecode.object",
+            "abi",
+            "evm.bytecode.sourceMap",
+            "evm.deployedBytecode.sourceMap",
+            "metadata"
+          ]
+        }
+      },
+    },
     }
   }
 };
