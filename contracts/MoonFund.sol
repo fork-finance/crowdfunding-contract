@@ -94,10 +94,6 @@ contract MoonFund is
     devaddr = _devaddr;
   }
 
-  function setRouter(IRouter02 _router) public onlyOperator {
-    router = _router;
-  }
-
   // transfer $fork to moon-fund and set the fork address when fork deployed 
   function setForkAddress(address _fork) public onlyOperator {
     require(_fork != address(0), "add: not _fork addr");
