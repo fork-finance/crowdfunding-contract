@@ -7,7 +7,7 @@ import '@openzeppelin/contracts/utils/Address.sol';
 import "./sForkToken.sol";
 import "./interfaces/IMoonFund.sol";
 import "./owner/Operator.sol";
-import "./interfaces/IUniswapV2Router02.sol";
+import "./interfaces/IRouter02.sol";
 import "./interfaces/IWETH.sol";
 
 contract MoonFund is
@@ -24,7 +24,7 @@ contract MoonFund is
   IERC20 public fork;
   address public weth;
 
-  IUniswapV2Router02 public router;
+  IRouter02 public router;
 
   // Dev address.
   address public devaddr;
@@ -54,7 +54,7 @@ contract MoonFund is
   event SwapExacted(address indexed user, address indexed token0,address indexed token1, uint256 amountIn);
 
   constructor(
-    IUniswapV2Router02 _router,
+    IRouter02 _router,
     sForkToken _sfork,
     address _weth,
     address _devaddr,
@@ -69,6 +69,7 @@ contract MoonFund is
     startTime = _startTime;
     endTime = _endTime;
     isSetForkAddress = false;
+    createdAt = block.timestamp;
     // totalCrowdfundingOfETH = _totalCrowdfundingOfETH;
   }
 
@@ -87,6 +88,10 @@ contract MoonFund is
   function setDev(address _devaddr) public {
     require(msg.sender == devaddr, "dev: wut?");
     devaddr = _devaddr;
+  }
+
+  function setRouter(IRouter02 _router) public onlyOperator {
+    router = _router;
   }
 
   // transfer $fork to moon-fund and set the fork address when fork deployed 

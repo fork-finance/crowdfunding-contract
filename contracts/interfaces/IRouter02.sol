@@ -1,6 +1,6 @@
 pragma solidity >=0.5.0;
 
-interface IUniswapV2Router02 {
+interface IRouter02 {
   function swapExactTokensForTokens(
     uint256 amountIn,
     uint256 amountOutMin,
