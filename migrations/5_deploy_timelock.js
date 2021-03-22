@@ -1,4 +1,5 @@
 const Timelock = artifacts.require("Timelock");
+const knownContracts = require('./known-contracts.js');
 
 const DAY = 86400;
 
