@@ -32,9 +32,15 @@ contract MoonFund is
   uint256 public startTime;
   uint256 public endTime;
 
-  uint256 public totalCrowdfundingOfETH = 10000e18;
+  uint256 public totalDeposit;
+  uint256 public currentDepositValue;
+
+  uint256 public sforkCap = 1880000e18;
+  uint256 public sforkPrice = 282;
+  uint256 public sforkSold;
 
   mapping(address => uint256) userTotalDeposit;
+  mapping(address => uint256) userHasFork;
 
   bool public isSetForkAddress;
   uint256 createdAt;
@@ -60,7 +66,6 @@ contract MoonFund is
     address _devaddr,
     uint256 _startTime,
     uint256 _endTime
-    // uint256 _totalCrowdfundingOfETH
   ) public {
     router = _router;
     sfork = _sfork;
@@ -70,7 +75,6 @@ contract MoonFund is
     endTime = _endTime;
     isSetForkAddress = false;
     createdAt = block.timestamp;
-    // totalCrowdfundingOfETH = _totalCrowdfundingOfETH;
   }
 
   modifier checkActive() {
@@ -104,7 +108,7 @@ contract MoonFund is
 
   function addCashPool(uint256 _point, uint256 _startTime) public override onlyOperator {
     uint256 allPoint = _point.add(poolsPoint());
-    require(allPoint<100, "add: all haven cashed");
+    require(allPoint<=100, "add: all haven cashed");
     require(_startTime >= block.timestamp, "add: startTime must > current time");
     cashPool.push(
       CashPool({
@@ -126,7 +130,9 @@ contract MoonFund is
   function poolLength() external override view returns (uint256) {
     return cashPool.length;
   }
-
+  function userDeposit(address _user) external view returns(uint256) {
+    return userTotalDeposit[_user];
+  }
   /**
   * crowdfunding
   */
@@ -138,12 +144,37 @@ contract MoonFund is
   function _deposit(uint256 amount) internal {
     require(msg.value != 0, "msg.value == 0");
     require(amount == msg.value, "amount != msg.value");
-    uint256 rewards = amount.mul(sfork.cap()).div(totalCrowdfundingOfETH);
+    require(amount>=1e17, "amount must > 0.1");
+    uint256 rewards = amount.mul(sforkPrice);
+    require(sforkSold.add(rewards)<=sforkCap, "sold out");
     IWETH(weth).deposit{value: msg.value}();
     IERC20(weth).safeTransfer(devaddr, amount.div(10));
     sfork.mint(msg.sender, rewards);
     userTotalDeposit[msg.sender] = userTotalDeposit[msg.sender].add(amount);
+    currentDepositValue = currentDepositValue.add(amount);
+    userHasFork[msg.sender] = userHasFork[msg.sender].add(rewards);
+    sforkSold = sforkSold.add(rewards);
     emit Deposit(msg.sender, amount);
+  }
+
+  function currentDeposit() external override view returns (uint256) {
+    return currentDepositValue;
+  }
+
+  function pending() external override view returns(uint256) {
+    return sforkCap.sub(sforkSold);
+  }
+
+  function sold() external view returns(uint256) {
+    return sforkSold;
+  }
+
+  function pendingOfETH() external view returns(uint256) {
+    return sforkCap.sub(sforkSold).div(sforkPrice);
+  }
+
+  function soldOfETH() external view returns(uint256) {
+    return sforkSold.div(sforkPrice);
   }
 
   /**
@@ -168,7 +199,7 @@ contract MoonFund is
   }
 
   function cash_limit(uint256 _pid, address _user) public view returns (uint256) {
-   return userTotalDeposit[_user].mul(cashPool[_pid].point).div(100).sub(userCashed[_pid][_user]);
+    return userHasFork[_user].mul(cashPool[_pid].point).div(100).sub(userCashed[_pid][_user]);
   }
 
   /**
