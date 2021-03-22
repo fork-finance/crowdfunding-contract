@@ -10,7 +10,7 @@ const conf = require("./conf");
 
 module.exports = async (deployer, network, accounts) => {
   const START_TIME = conf.START_TIME[network] ? conf.START_TIME[network] : Date.parse('2021-03-22 14:00:00') / 1000;
-  const END_TIME = conf.END_TIME[network] ? conf.END_TIME[network] : Date.parse('2021-03-22 14:00:00') / 1000;
+  const END_TIME = conf.END_TIME[network] ? conf.END_TIME[network] : Date.parse('2021-04-22 14:00:00') / 1000;
 
   await deployer.deploy(sForkToken);
 
