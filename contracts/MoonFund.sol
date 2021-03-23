@@ -276,6 +276,10 @@ contract MoonFund is
   function withdrawFork(address _to, uint256 _amount) external checkLock onlyOwner {
     fork.safeTransfer(_to, _amount);
   }
+  
+  function getCroTime() external view returns(uint256, uint256, uint256) {
+    return (startTime, endTime, block.timestamp);
+  }
 
   receive() external payable {}
 }
