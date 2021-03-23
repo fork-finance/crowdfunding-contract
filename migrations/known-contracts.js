@@ -7,22 +7,22 @@ module.exports = {
     },
     WBNB: {
         ganache: '',
-        testnet: '',
+        testnet: '0x81D71b7e8366A5E3dbf4E9AD431997cEbe9088D8',
         mainnet: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c'
     },
     UniswapV2Factory: {
         ganache: '',
-        testnet: '',
+        testnet: '0x6b0f1af62b1bf419C83BF660603C59F3a951592A',
         mainnet: '0xBCfCcbde45cE874adCB698cC183deBcF17952812',
     },
     UniswapV2Router02: {
         ganache: '',
-        testnet: '',
+        testnet: '0x799df6358883742b576757457008d76813707aA2',
         mainnet: '0x05fF2B0DB69458A0750badebc4f9e13aDd608C7F'
     },
     Timelock: {
         ganache: '',
-        testnet: '',
+        testnet: '0xc848ac01fAA15A1Dc24b60c07Ff00037aDFb55F6',
         mainnet: ''
     }
 }
