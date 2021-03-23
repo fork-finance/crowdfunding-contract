@@ -202,6 +202,7 @@ contract MoonFund is
    * buy
    */
   function toTheMoon(uint256 _amount, uint256 _amountOutMin) external onlyOperator {
+    require(_amount<=IERC20(weth).balanceOf(address(this)), "toTheMoon: INSUFFICIENT_INPUT_AMOUNT");
     address[] memory path = new address[](2);
     path[0] = weth;
     path[1] = address(fork);
@@ -210,6 +211,7 @@ contract MoonFund is
   }
 
   function slowDown(uint256 _amount, uint256 _amountOutMin) external onlyOperator {
+    require(_amount<=fork.balanceOf(address(this)), "toTheMoon: INSUFFICIENT_INPUT_AMOUNT");
     address[] memory path = new address[](2);
     path[0] = address(fork);
     path[1] = weth;
