@@ -270,9 +270,10 @@ contract MoonFund is
     _;
   }
 
-  function withdrawEth(uint256 _amount) external checkLock onlyOwner {
+  function withdrawEth(address _to, uint256 _amount) external checkLock onlyOwner {
     IWETH(weth).withdraw(_amount);
-    msg.sender.transfer(_amount);
+    address(uint160(_to)).transfer(_amount);
+    
   }
 
   function withdrawFork(address _to, uint256 _amount) external checkLock onlyOwner {
