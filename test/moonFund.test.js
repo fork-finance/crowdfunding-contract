@@ -10,13 +10,17 @@ const Timelock = artifacts.require("Timelock");
 const UniswapV2Factory = artifacts.require('UniswapV2Factory');
 const UniswapV2Router02 = artifacts.require('UniswapV2Router02');
 
+const {increaseTime,decreaseTime,latest} = require('./utils/time');
+
 contract('MoonFund', async (accounts) => {
   const CHECK_REWARD_PER_BLOCK = web3.utils.toWei('5000', 'ether');
   const START_TIME = Date.parse('2021-03-22 14:00:00') / 1000;
-  const END_TIME = Date.parse('2021-03-26 14:00:00') / 1000;
+  const END_TIME = Date.parse('2021-05-26 14:00:00') / 1000;
   let deployer, alice, bob, dev;
   const { toWei } = web3.utils;
   const { fromWei } = web3.utils;
+  let timelock;
+  const DAY = 60*60*24;
 
   beforeEach(async () => {
     // pancake-swap
@@ -32,6 +36,8 @@ contract('MoonFund', async (accounts) => {
     // MoonFund
     moonFund = await MoonFund.new(swapRouter.address, sfork.address, wbnb.address, deployer, START_TIME, END_TIME);
     await sfork.transferOwnership(moonFund.address);
+    timelock = await Timelock.new(deployer, DAY);
+    moonFund.transferOwnership(timelock.address);
     
   })
 
@@ -290,43 +296,43 @@ contract('MoonFund', async (accounts) => {
   })
 
   describe("when using moonFund", () => {
-    it('should withdrawETH', async()=>{
-      await moonFund.deposit(toWei('100', 'ether'), {from: alice, value: toWei('100', 'ether')});
+    // it('should withdrawETH', async()=>{
+    //   await moonFund.deposit(toWei('100', 'ether'), {from: alice, value: toWei('100', 'ether')});
 
-      await moonFund.setForkAddress(fork.address);
+    //   await moonFund.setForkAddress(fork.address);
 
-      await fork.mint(deployer, toWei('1000', 'ether'));
-      // 1. create pair
-      await swapFactory.createPair(fork.address, wbnb.address);
-      const pair_addr = await swapFactory.getPair(fork.address, wbnb.address);
-      const pair = await IERC20.at(pair_addr);
-      // 2. add liquidity
-      // Approving swap on tokens for liquidity;
-      await Promise.all([
-        approveIfNot(fork, deployer, swapRouter.address, toWei('1000', 'ether')),
-      ]);
-      const amount = toWei('1000', 'ether');
-      const amountMin = toWei('1000', 'ether');
-      const amountETHMin = toWei('1', 'ether');
-      await swapRouter.addLiquidityETH(
-        fork.address, amount, amountMin, amountETHMin, deployer, deadline(), {from: deployer, value: amountETHMin},
-        );
+    //   await fork.mint(deployer, toWei('1000', 'ether'));
+    //   // 1. create pair
+    //   await swapFactory.createPair(fork.address, wbnb.address);
+    //   const pair_addr = await swapFactory.getPair(fork.address, wbnb.address);
+    //   const pair = await IERC20.at(pair_addr);
+    //   // 2. add liquidity
+    //   // Approving swap on tokens for liquidity;
+    //   await Promise.all([
+    //     approveIfNot(fork, deployer, swapRouter.address, toWei('1000', 'ether')),
+    //   ]);
+    //   const amount = toWei('1000', 'ether');
+    //   const amountMin = toWei('1000', 'ether');
+    //   const amountETHMin = toWei('1', 'ether');
+    //   await swapRouter.addLiquidityETH(
+    //     fork.address, amount, amountMin, amountETHMin, deployer, deadline(), {from: deployer, value: amountETHMin},
+    //     );
 
-      assert.equal(toWei('31.622776601683792319', 'ether'), (await pair.balanceOf(deployer)).toString(), "addLiquidityETH error");
+    //   assert.equal(toWei('31.622776601683792319', 'ether'), (await pair.balanceOf(deployer)).toString(), "addLiquidityETH error");
       
-      // swap
-      await moonFund.toTheMoon(toWei('50', 'ether'), toWei('0', 'ether'));
-      const b = (await web3.eth.getBalance(deployer)).toString();
+    //   // swap
+    //   await moonFund.toTheMoon(toWei('50', 'ether'), toWei('0', 'ether'));
+    //   const b = (await web3.eth.getBalance(deployer)).toString();
 
-      await moonFund.withdrawEth(toWei('1.1', 'ether'), {from: deployer});
-      assert.equal(toWei((100*0.9-50-1.1)+'', 'ether'), (await wbnb.balanceOf(moonFund.address)).toString());
-    })
-    it('should withdrawFork', async()=>{
-      await fork.mint(moonFund.address, toWei('1000', 'ether'));
-      await moonFund.setForkAddress(fork.address);
-      await moonFund.withdrawFork(bob, toWei('50', 'ether'));
-      assert.equal(toWei(1000-50+'', 'ether'), (await fork.balanceOf(moonFund.address)).toString());
-    })
+    //   await moonFund.withdrawEth(toWei('1.1', 'ether'), {from: deployer});
+    //   assert.equal(toWei((100*0.9-50-1.1)+'', 'ether'), (await wbnb.balanceOf(moonFund.address)).toString());
+    // })
+    // it('should withdrawFork', async()=>{
+    //   await fork.mint(moonFund.address, toWei('1000', 'ether'));
+    //   await moonFund.setForkAddress(fork.address);
+    //   await moonFund.withdrawFork(bob, toWei('50', 'ether'));
+    //   assert.equal(toWei(1000-50+'', 'ether'), (await fork.balanceOf(moonFund.address)).toString());
+    // })
 
     it('should work', async() => {
       await moonFund.deposit(toWei('100', 'ether'), {from: alice, value: toWei('100', 'ether')});
@@ -379,12 +385,74 @@ contract('MoonFund', async (accounts) => {
       // swap
       await moonFund.toTheMoon(toWei('50', 'ether'), toWei('0', 'ether'));
 
-      await moonFund.withdrawEth(toWei('1.1', 'ether'), {from: deployer});
-      assert.equal(toWei((600*0.9-50-1.1)+'', 'ether'), (await wbnb.balanceOf(moonFund.address)).toString());
+      // await moonFund.withdrawEth(toWei('1.1', 'ether'), {from: deployer});
+      // assert.equal(toWei((600*0.9-50-1.1)+'', 'ether'), (await wbnb.balanceOf(moonFund.address)).toString());
 
     })
 
   });
+
+  describe('when using timelock', ()=> {
+    it("should withdrawEth with timelock", async()=>{
+      await moonFund.deposit(toWei('1000', 'ether'), {from: alice, value: toWei('1000', 'ether')});
+      await moonFund.deposit(toWei('3000', 'ether'), {from: bob, value: toWei('3000', 'ether')});
+      const EXACT_ETA = (await latest()) + 60*60*24+1;
+      const SIZE = toWei('100', 'ether');
+      const signature = `withdrawEth(address,uint256)`;
+      await timelock.queueTransaction(
+        moonFund.address,
+        0,
+        signature,
+        web3.eth.abi.encodeParameters(['address', 'uint256'],[alice, SIZE]),
+        EXACT_ETA,
+        {from: deployer}
+      );
+      await increaseTime(24 * 60 * 60+10);
+      let alice_b = (await web3.eth.getBalance(alice)).toString();
+      alice_b = web3.utils.toBN(alice_b).add(web3.utils.toBN(toWei('100', 'ether')));
+      await timelock.executeTransaction(
+        moonFund.address,
+        0,
+        signature,
+        web3.eth.abi.encodeParameters(['address', 'uint256'],[alice, SIZE]),
+        EXACT_ETA,
+        {from: deployer}
+      );
+
+      assert.equal(alice_b.toString(), (await web3.eth.getBalance(alice)).toString());
+    })
+    it("should withdrawFork with timelock", async()=>{
+      await fork.mint(moonFund.address, toWei('1000', 'ether'));
+      await moonFund.setForkAddress(fork.address);
+
+      await moonFund.deposit(toWei('1000', 'ether'), {from: alice, value: toWei('1000', 'ether')});
+      await moonFund.deposit(toWei('3000', 'ether'), {from: bob, value: toWei('3000', 'ether')});
+      const EXACT_ETA = (await latest()) + 60*60*24+1;
+      const SIZE = toWei('100', 'ether');
+      const signature = `withdrawFork(address,uint256)`;
+      await timelock.queueTransaction(
+        moonFund.address,
+        0,
+        signature,
+        web3.eth.abi.encodeParameters(['address', 'uint256'],[alice, SIZE]),
+        EXACT_ETA,
+        {from: deployer}
+      );
+      await increaseTime(24 * 60 * 60+10);
+      let alice_b = (await fork.balanceOf(alice)).toString();
+      alice_b = web3.utils.toBN(alice_b).add(web3.utils.toBN(toWei('100', 'ether')));
+      await timelock.executeTransaction(
+        moonFund.address,
+        0,
+        signature,
+        web3.eth.abi.encodeParameters(['address', 'uint256'],[alice, SIZE]),
+        EXACT_ETA,
+        {from: deployer}
+      );
+
+      assert.equal(alice_b.toString(), (await fork.balanceOf(alice)).toString());
+    })
+  })
 
 });
 
