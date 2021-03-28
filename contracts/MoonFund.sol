@@ -28,6 +28,7 @@ contract MoonFund is
 
   // Dev address.
   address public devaddr;
+  address public marketaddr;
 
   uint256 public startTime;
   uint256 public endTime;
@@ -35,15 +36,21 @@ contract MoonFund is
   uint256 public totalDeposit;
   uint256 public currentDepositValue;
 
-  uint256 public sforkCap = 1880000e18;
-  uint256 public sforkPrice = 282;
-  uint256 public sforkSold;
-
   mapping(address => uint256) userTotalDeposit;
   mapping(address => uint256) userHasFork;
 
   bool public isSetForkAddress;
   uint256 createdAt;
+
+  struct SellPool {
+    uint256 price;
+    uint256 startTime;
+    uint256 endTime;
+    uint256 cap;
+    uint256 sold;
+  }
+  SellPool[] public sellPool;
+  mapping(uint256 => mapping(address => uint256)) whitelist;
 
   // cash pool
   struct CashPool {
@@ -65,7 +72,8 @@ contract MoonFund is
     address _weth,
     address _devaddr,
     uint256 _startTime,
-    uint256 _endTime
+    uint256 _endTime,
+    uint256 _marketaddr
   ) public {
     router = _router;
     sfork = _sfork;
@@ -75,11 +83,12 @@ contract MoonFund is
     endTime = _endTime;
     isSetForkAddress = false;
     createdAt = block.timestamp;
+    marketaddr = _marketaddr;
   }
 
-  modifier checkActive() {
-    require(block.timestamp >= startTime, 'crowdfunding: not start');
-    require(block.timestamp < endTime, 'crowdfunding: is over');
+  modifier checkActive(pid) {
+    require(block.timestamp >= sellPool[pid].startTime, 'crowdfunding: not start');
+    require(block.timestamp < sellPool[pid].endTime, 'crowdfunding: is over');
     _;
   }
 
@@ -123,33 +132,73 @@ contract MoonFund is
     return currentPoint;
   }
 
-  function poolLength() external override view returns (uint256) {
+  function cashPoolLength() external override view returns (uint256) {
     return cashPool.length;
   }
   function userDeposit(address _user) external view returns(uint256) {
     return userTotalDeposit[_user];
   }
+
+
+  function addSellPool(
+    uint256 _price,
+    uint256 _cap,
+    uint256 _limit,
+    uint256 _startTime,
+    uint256 _endTime
+  ) public override onlyOperator {
+    require(_endTime >= block.timestamp, "add: endTime must > current time");
+    sellPool.push(
+      SellPool({
+        price: _price,
+        cap: _cap,
+        limit: _limit,
+        startTime: _startTime,
+        endTime: _endTime
+      })
+    );
+  }
+
+  function sellPoolLength() external override view returns (uint256) {
+    return sellPool.length;
+  }
+
+  // whitelist
+  function massUpdateWhitelist(uint256 _pid, uint256 _amountMax, address[] calldata users) external {
+    uint256 length = users.length;
+    for (uint256 i = 0; i < length; ++i) {
+      updateWhitelist(pid, users[i], _amountMax);
+    }
+  }
+
+  // whitelist
+  function updateWhitelist(uint256 _pid, address _user, uint256 _amountMax) public {
+    whitelist[_pid][_user] = _amountMax;
+  }
   /**
   * crowdfunding
   */
-  function deposit(uint256 amount)
-  external override payable checkActive {
-    _deposit(amount);
+  function deposit(uint256 _pid,uint256 amount)
+  external override payable checkActive(_pid) {
+    _deposit(_pid, amount);
   }
   
-  function _deposit(uint256 amount) internal {
+  function _deposit(uint256 _pid,uint256 amount) internal {
     require(msg.value != 0, "msg.value == 0");
     require(amount == msg.value, "amount != msg.value");
     require(amount>=1e17, "amount must > 0.1");
-    uint256 rewards = amount.mul(sforkPrice);
-    require(sforkSold.add(rewards)<=sforkCap, "sold out");
+    require(amount<=whitelist[_pid][msg.sender], "white-list amount must > 0");
+
+    uint256 rewards = amount.mul(sellPool[_pid].price);
+    require(sellPool[_pid].sold.add(rewards)<=sellPool[_pid].cap, "sold out");
     IWETH(weth).deposit{value: msg.value}();
     IERC20(weth).safeTransfer(devaddr, amount.div(10));
+    IERC20(weth).safeTransfer(marketaddr, amount.div(20));
     sfork.mint(msg.sender, rewards);
     userTotalDeposit[msg.sender] = userTotalDeposit[msg.sender].add(amount);
     currentDepositValue = currentDepositValue.add(amount);
     userHasFork[msg.sender] = userHasFork[msg.sender].add(rewards);
-    sforkSold = sforkSold.add(rewards);
+    sellPool[_pid].sold = sellPool[_pid].sold.add(rewards);
     emit Deposit(msg.sender, amount);
   }
 
@@ -157,20 +206,20 @@ contract MoonFund is
     return currentDepositValue;
   }
 
-  function pending() external override view returns(uint256) {
-    return sforkCap.sub(sforkSold);
+  function pending(uint256 _pid) external override view returns(uint256) {
+    return sellPool[_pid].cap.sub(sellPool[_pid].sold);
   }
 
-  function sold() external view returns(uint256) {
-    return sforkSold;
+  function sold(uint256 _pid) external view returns(uint256) {
+    return sellPool[_pid].sold;
   }
 
-  function pendingOfETH() external view returns(uint256) {
-    return sforkCap.sub(sforkSold).div(sforkPrice);
+  function pendingOfETH(uint256 _pid) external view returns(uint256) {
+    return sellPool[_pid].cap.sub(sellPool[_pid].sold).div(sellPool[_pid].price);
   }
 
   function soldOfETH() external view returns(uint256) {
-    return sforkSold.div(sforkPrice);
+    return sellPool[_pid].sold.div(sellPool[_pid].price);
   }
 
   /**
@@ -273,7 +322,7 @@ contract MoonFund is
   function withdrawEth(address _to, uint256 _amount) external checkLock onlyOwner {
     IWETH(weth).withdraw(_amount);
     address(uint160(_to)).transfer(_amount);
-    
+
   }
 
   function withdrawFork(address _to, uint256 _amount) external checkLock onlyOwner {
