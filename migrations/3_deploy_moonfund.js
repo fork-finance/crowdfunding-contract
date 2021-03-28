@@ -19,7 +19,7 @@ module.exports = async (deployer, network, accounts) => {
   const wbnb = knownContracts.WBNB[network] ? await IWBNB.at(knownContracts.WBNB[network]) : await MockWBNB.deployed();
   const swapRouter = knownContracts.UniswapV2Router02[network] ? await UniswapV2Router02.at(knownContracts.UniswapV2Router02[network]) : await UniswapV2Router02.deployed();
 
-  await deployer.deploy(MoonFund, swapRouter.address, sforkToken.address, wbnb.address, accounts[0], START_TIME, END_TIME);
+  await deployer.deploy(MoonFund, swapRouter.address, sforkToken.address, wbnb.address, accounts[0], accounts[0]);
 
   const moonFund = await MoonFund.deployed();
   console.log(">> 1 Transferring ownership of checkToken from deployer to MoonFund");
