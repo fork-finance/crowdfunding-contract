@@ -30,9 +30,6 @@ contract MoonFund is
   address public devaddr;
   address public marketaddr;
 
-  uint256 public startTime;
-  uint256 public endTime;
-
   uint256 public totalDeposit;
   uint256 public currentDepositValue;
 
@@ -44,9 +41,9 @@ contract MoonFund is
 
   struct SellPool {
     uint256 price;
+    uint256 cap;
     uint256 startTime;
     uint256 endTime;
-    uint256 cap;
     uint256 sold;
   }
   SellPool[] public sellPool;
@@ -71,36 +68,37 @@ contract MoonFund is
     sForkToken _sfork,
     address _weth,
     address _devaddr,
-    uint256 _startTime,
-    uint256 _endTime,
-    uint256 _marketaddr
+    address _marketaddr
   ) public {
     router = _router;
     sfork = _sfork;
     weth = _weth;
     devaddr = _devaddr;
-    startTime = _startTime;
-    endTime = _endTime;
+    marketaddr = _marketaddr;
     isSetForkAddress = false;
     createdAt = block.timestamp;
-    marketaddr = _marketaddr;
   }
 
-  modifier checkActive(pid) {
-    require(block.timestamp >= sellPool[pid].startTime, 'crowdfunding: not start');
-    require(block.timestamp < sellPool[pid].endTime, 'crowdfunding: is over');
+  modifier checkActive(uint256 _pid) {
+    require(block.timestamp >= sellPool[_pid].startTime, 'crowdfunding: not start');
+    require(block.timestamp < sellPool[_pid].endTime, 'crowdfunding: is over');
     _;
   }
 
-  modifier checkCash(uint256 pid) {
+  modifier checkCash(uint256 _pid) {
     require(isSetForkAddress, "cashing not active");
-    require(block.timestamp >= cashPool[pid].startTime, 'cashing: not start');
+    require(block.timestamp >= cashPool[_pid].startTime, 'cashing: not start');
     _;
   }
 
   function setDev(address _devaddr) public {
     require(msg.sender == devaddr, "dev: wut?");
     devaddr = _devaddr;
+  }
+
+  function setMarket(address _marketaddr) public {
+    require(msg.sender == _marketaddr, "market: wut?");
+    marketaddr = _marketaddr;
   }
 
   // transfer $fork to moon-fund and set the fork address when fork deployed 
@@ -139,11 +137,9 @@ contract MoonFund is
     return userTotalDeposit[_user];
   }
 
-
   function addSellPool(
     uint256 _price,
     uint256 _cap,
-    uint256 _limit,
     uint256 _startTime,
     uint256 _endTime
   ) public override onlyOperator {
@@ -152,9 +148,9 @@ contract MoonFund is
       SellPool({
         price: _price,
         cap: _cap,
-        limit: _limit,
         startTime: _startTime,
-        endTime: _endTime
+        endTime: _endTime,
+        sold: 0
       })
     );
   }
@@ -164,17 +160,18 @@ contract MoonFund is
   }
 
   // whitelist
-  function massUpdateWhitelist(uint256 _pid, uint256 _amountMax, address[] calldata users) external {
+  function massUpdateWhitelist(uint256 _pid, uint256 _amountMax, address[] calldata users) external onlyOperator {
     uint256 length = users.length;
     for (uint256 i = 0; i < length; ++i) {
-      updateWhitelist(pid, users[i], _amountMax);
+      updateWhitelist(_pid, users[i], _amountMax);
     }
   }
 
   // whitelist
-  function updateWhitelist(uint256 _pid, address _user, uint256 _amountMax) public {
+  function updateWhitelist(uint256 _pid, address _user, uint256 _amountMax) public onlyOperator {
     whitelist[_pid][_user] = _amountMax;
   }
+
   /**
   * crowdfunding
   */
@@ -218,7 +215,7 @@ contract MoonFund is
     return sellPool[_pid].cap.sub(sellPool[_pid].sold).div(sellPool[_pid].price);
   }
 
-  function soldOfETH() external view returns(uint256) {
+  function soldOfETH(uint256 _pid) external view returns(uint256) {
     return sellPool[_pid].sold.div(sellPool[_pid].price);
   }
 
@@ -329,8 +326,8 @@ contract MoonFund is
     fork.safeTransfer(_to, _amount);
   }
   
-  function getCroTime() external view returns(uint256, uint256, uint256) {
-    return (startTime, endTime, block.timestamp);
+  function getCroTime(uint256 _pid) external view returns(uint256, uint256, uint256) {
+    return (sellPool[_pid].startTime, sellPool[_pid].endTime, block.timestamp);
   }
 
   receive() external payable {}
