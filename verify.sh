@@ -1,7 +1,6 @@
 #!/bin/bash
 
-contracts=(sForkToken
-MoonFund
+contracts=(MoonFund
 MockWBNB
 UniswapV2Factory
 UniswapV2Router02)
