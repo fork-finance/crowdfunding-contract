@@ -39,7 +39,7 @@ module.exports = async (deployer, network, accounts) => {
     },
     Tokens: {
       WBNB: wbnb.address,
-      sFORK: sForkToken.address,
+      // sFORK: sForkToken.address,
     }
   };
 
@@ -49,7 +49,7 @@ module.exports = async (deployer, network, accounts) => {
 
   console.log(`Exported deployments into ${deploymentPath}`);
 
-  let contracts = [sForkToken, MoonFund];
+  let contracts = [MoonFund];
 
   const abiPath = path.resolve(__dirname, `../build/abis/${network}`);
   

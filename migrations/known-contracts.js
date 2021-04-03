@@ -23,6 +23,12 @@ module.exports = {
     Timelock: {
         ganache: '',
         testnet: '0xc848ac01fAA15A1Dc24b60c07Ff00037aDFb55F6',
-        mainnet: ''
+        mainnet: '0xec4aB53bfC3BBA5b2379Dafb00312a3C607F0029'
+    },
+    FORK: {
+        ganache: '',
+        testnet: '0xa3fd694c5cB6233beE7aCad94Cb11C57F157324A',
+        // 居然一样
+        mainnet: '0xa3fd694c5cB6233beE7aCad94Cb11C57F157324A'
     }
 }
