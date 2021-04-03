@@ -2,9 +2,8 @@ pragma solidity 0.6.6;
 
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import '@openzeppelin/contracts/utils/Address.sol';
+import "@openzeppelin/contracts/utils/Address.sol";
 
-import "./sForkToken.sol";
 import "./interfaces/IMoonFund.sol";
 import "./owner/Operator.sol";
 import "./interfaces/IRouter02.sol";
@@ -20,7 +19,6 @@ contract MoonFund is
   using SafeERC20 for IERC20;
 
   // The TOKEN
-  sForkToken public sfork;
   IERC20 public fork;
   address public weth;
 
@@ -33,61 +31,53 @@ contract MoonFund is
   uint256 public totalDeposit;
   uint256 public currentDepositValue;
 
-  mapping(address => uint256) userTotalDeposit;
-  mapping(address => uint256) userHasFork;
+  mapping(address => uint256) private userTotalDeposit;
+  mapping(address => uint256) private userHasFork;
 
-  bool public isSetForkAddress;
-  uint256 createdAt;
+  uint256 public createdAt;
+  uint256 public lockTime;
 
   struct SellPool {
+    string title;
     uint256 price;
     uint256 cap;
     uint256 startTime;
     uint256 endTime;
     uint256 sold;
+    // other config
+    uint256 allocationMin;
+    uint256 allocationMax;
+    uint256 markePoint;
+    uint256 devPoint;
+    bool isPrivate;
   }
   SellPool[] public sellPool;
-  mapping(uint256 => mapping(address => uint256)) whitelist;
-
-  // cash pool
-  struct CashPool {
-    uint256 point;
-    uint256 startTime;
-  }
-
-  CashPool[] public cashPool;
-
-  mapping(uint256 => mapping(address => uint256)) public userCashed;
+  mapping(uint256 => mapping(address => uint256)) public whitelist;
+  mapping(uint256 => mapping(address => uint256)) public whitelistQuataUsed;
 
   event Deposit(address indexed user, uint256 amount);
-  event Cashed(address indexed user, uint256 indexed pid, uint256 amount);
   event SwapExacted(address indexed user, address indexed token0,address indexed token1, uint256 amountIn);
 
   constructor(
     IRouter02 _router,
-    sForkToken _sfork,
+    IERC20 _fork,
     address _weth,
     address _devaddr,
-    address _marketaddr
+    address _marketaddr,
+    uint256 _lockTime
   ) public {
     router = _router;
-    sfork = _sfork;
+    fork = _fork;
     weth = _weth;
     devaddr = _devaddr;
     marketaddr = _marketaddr;
-    isSetForkAddress = false;
     createdAt = block.timestamp;
+    lockTime = _lockTime;
   }
 
   modifier checkActive(uint256 _pid) {
     require(block.timestamp >= sellPool[_pid].startTime, 'crowdfunding: not start');
     require(block.timestamp < sellPool[_pid].endTime, 'crowdfunding: is over');
-    _;
-  }
-
-  modifier checkCash(uint256 _pid) {
-    require(isSetForkAddress, "cashing not active");
-    require(block.timestamp >= cashPool[_pid].startTime, 'cashing: not start');
     _;
   }
 
@@ -101,59 +91,56 @@ contract MoonFund is
     marketaddr = _marketaddr;
   }
 
-  // transfer $fork to moon-fund and set the fork address when fork deployed 
-  function setForkAddress(address _fork) public onlyOperator {
-    require(_fork != address(0), "add: not _fork addr");
-    fork = IERC20(_fork);
-    isSetForkAddress = true;
-    createdAt = block.timestamp;
-  }
-
-  function addCashPool(uint256 _point, uint256 _startTime) public override onlyOperator {
-    uint256 allPoint = _point.add(poolsPoint());
-    require(allPoint<=100, "add: all haven cashed");
-    require(_startTime >= block.timestamp, "add: startTime must > current time");
-    cashPool.push(
-      CashPool({
-        point: _point,
-        startTime: _startTime
-      })
-    );
-  }
-
-  function poolsPoint() public view returns (uint256) {
-    uint256 currentPoint = 0;
-    uint256 length = cashPool.length;
-    for (uint256 _pid = 0; _pid < length; _pid++) {
-      currentPoint = currentPoint.add(cashPool[_pid].point);
-    }
-    return currentPoint;
-  }
-
-  function cashPoolLength() external override view returns (uint256) {
-    return cashPool.length;
-  }
-  function userDeposit(address _user) external view returns(uint256) {
-    return userTotalDeposit[_user];
-  }
-
   function addSellPool(
+    string memory _title,
     uint256 _price,
     uint256 _cap,
     uint256 _startTime,
-    uint256 _endTime
+    uint256 _endTime,
+    uint256 _allocationMin,
+    uint256 _allocationMax,
+    uint256 _marketPoint,
+    uint256 _devPoint,
+    bool _isPrivate
   ) public override onlyOperator {
     require(_endTime >= block.timestamp, "add: endTime must > current time");
     sellPool.push(
       SellPool({
+        title: _title,
         price: _price,
         cap: _cap,
         startTime: _startTime,
         endTime: _endTime,
-        sold: 0
+        sold: 0,
+        // other config
+        allocationMin: _allocationMin,
+        allocationMax: _allocationMax,
+        markePoint: _marketPoint,
+        devPoint: _devPoint,
+        isPrivate: _isPrivate
       })
     );
   }
+
+  // function setSellPool(
+  //   uint256 _pid,
+  //   string memory _title,
+  //   uint256 _price,
+  //   uint256 _cap,
+  //   uint256 _startTime,
+  //   uint256 _endTime,
+  //   uint256 _allocationMin,
+  //   uint256 _allocationMax
+  // ) public onlyOperator {
+  //   require(_endTime >= block.timestamp, "update: endTime must > current time");
+  //   require(sellPool[_pid].startTime < block.timestamp, "update: can't update after start");
+  //   sellPool[_pid].title = _title;
+  //   sellPool[_pid].price = _price;
+  //   sellPool[_pid].startTime = _startTime;
+  //   sellPool[_pid].endTime = _endTime;
+  //   sellPool[_pid].allocationMin = _allocationMin;
+  //   sellPool[_pid].allocationMax = _allocationMax;
+  // }
 
   function sellPoolLength() external override view returns (uint256) {
     return sellPool.length;
@@ -183,19 +170,26 @@ contract MoonFund is
   function _deposit(uint256 _pid,uint256 amount) internal {
     require(msg.value != 0, "msg.value == 0");
     require(amount == msg.value, "amount != msg.value");
-    require(amount>=1e17, "amount must > 0.1");
-    require(amount<=whitelist[_pid][msg.sender], "white-list amount must > 0");
+    require(amount>=sellPool[_pid].allocationMin, "amount must > allocationMin");
+    require(amount<=sellPool[_pid].allocationMax, "amount must <= allocationMax");
+    if (sellPool[_pid].isPrivate) {
+      require(amount<=whitelist[_pid][msg.sender], "white-list amount must > 0");
+    }
 
     uint256 rewards = amount.mul(sellPool[_pid].price);
     require(sellPool[_pid].sold.add(rewards)<=sellPool[_pid].cap, "sold out");
+
     IWETH(weth).deposit{value: msg.value}();
-    IERC20(weth).safeTransfer(devaddr, amount.div(10));
-    IERC20(weth).safeTransfer(marketaddr, amount.div(20));
-    sfork.mint(msg.sender, rewards);
+    IERC20(weth).safeTransfer(devaddr, amount.mul(sellPool[_pid].devPoint).div(100));
+    IERC20(weth).safeTransfer(marketaddr, amount.mul(sellPool[_pid].markePoint).div(100));
+    fork.safeTransfer(msg.sender, rewards);
+
     userTotalDeposit[msg.sender] = userTotalDeposit[msg.sender].add(amount);
     currentDepositValue = currentDepositValue.add(amount);
     userHasFork[msg.sender] = userHasFork[msg.sender].add(rewards);
+    whitelistQuataUsed[_pid][msg.sender] = whitelistQuataUsed[_pid][msg.sender].add(amount);
     sellPool[_pid].sold = sellPool[_pid].sold.add(rewards);
+
     emit Deposit(msg.sender, amount);
   }
 
@@ -219,30 +213,13 @@ contract MoonFund is
     return sellPool[_pid].sold.div(sellPool[_pid].price);
   }
 
-  /**
-   * cash
-   */
-
-  function cash(uint256 _pid, uint256 _amount) external override {
-    _cash(_pid, _amount);
+  function userPendingQuata(uint256 _pid, address _user) external view returns(uint256) {
+    if (sellPool[_pid].isPrivate && whitelist[_pid][_user] <= sellPool[_pid].allocationMax) {
+      return whitelist[_pid][_user].sub(whitelistQuataUsed[_pid][_user]);
+    }
+    return sellPool[_pid].allocationMax.sub(whitelistQuataUsed[_pid][_user]);
   }
 
-  function pendingCash(uint256 _pid, address _user) external override view returns (uint256) {
-    return cash_limit(_pid, _user);
-  }
-
-  function _cash(uint256 _pid, uint256 _amount) internal checkCash(_pid) {
-    uint256 maxCash = cash_limit(_pid, msg.sender);
-    require(_amount<=maxCash, 'cashing: amount > maxlimit');
-    sfork.burn(msg.sender, _amount);
-    fork.safeTransfer(msg.sender, _amount);
-    userCashed[_pid][msg.sender] = userCashed[_pid][msg.sender].add(_amount);
-    emit Cashed(msg.sender, _pid, _amount);
-  }
-
-  function cash_limit(uint256 _pid, address _user) public view returns (uint256) {
-    return userHasFork[_user].mul(cashPool[_pid].point).div(100).sub(userCashed[_pid][_user]);
-  }
 
   /**
    * buy
@@ -311,7 +288,7 @@ contract MoonFund is
   // owned by timelock;
   // all withdraw must after lock and by timelock
   modifier checkLock() {
-    uint256 unlockAt =  createdAt.add(3600*24*30*3);
+    uint256 unlockAt =  createdAt.add(lockTime);
     require(block.timestamp>=unlockAt, "locking");
     _;
   }
