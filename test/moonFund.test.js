@@ -27,61 +27,118 @@ contract('MoonFund', async (accounts) => {
     swapRouter = await UniswapV2Router02.deployed();
     swapFactory = await UniswapV2Factory.deployed();
     // tokens
-    sfork = await sForkToken.new();
+    // sfork = await sForkToken.new();
     wbnb = await MockWBNB.deployed();
     fork = await MockERC20.new('Mock Fork Token', 'FORK');
+    sfork = fork;
 
     // users
     [deployer, alice, bob, dev] = accounts;
     // MoonFund
-    moonFund = await MoonFund.new(swapRouter.address, sfork.address, wbnb.address, deployer, deployer);
-    await sfork.transferOwnership(moonFund.address);
+    moonFund = await MoonFund.new(swapRouter.address, fork.address, wbnb.address, deployer, deployer, 0);
+    // await sfork.transferOwnership(moonFund.address);
     timelock = await Timelock.new(deployer, DAY);
     moonFund.transferOwnership(timelock.address);
 
     const sellPools = [{
+      title: 'Strategic funding',
       price: 288,
       cap: toWei('10000000', 'ether'),
       startTime: await latest(),
-      endTime: (await latest() + 5*24*3600)
+      endTime: (await latest() + 5*24*3600),
+      allocationMin: toWei('0.1', 'ether'),
+      allocationMax: toWei('5000', 'ether'),
+      marketPoint: 5,
+      devPoint: 10,
+      isPrivate: true
     },{
+      title: 'Seed funding invest',
       price: 1440,
       cap: toWei('216000', 'ether'),
       startTime: await latest(),
-      endTime: (await latest() + 5*24*3600)
+      endTime: (await latest() + 5*24*3600),
+      allocationMin: toWei('0.1', 'ether'),
+      allocationMax: toWei('10', 'ether'),
+      marketPoint: 90,
+      devPoint: 10,
+      isPrivate: true
+    },{
+      title: 'Public offering',
+      price: 225,
+      cap: toWei('225600', 'ether'),
+      startTime: await latest(),
+      endTime: (await latest() + 5*24*3600),
+      allocationMin: toWei('0.1', 'ether'),
+      allocationMax: toWei('15', 'ether'),
+      marketPoint: 5,
+      devPoint: 10,
+      isPrivate: false
+    },{
+      title: 'Public offering',
+      price: 225,
+      cap: toWei('225600', 'ether'),
+      startTime: await latest() + 3*24*3600,
+      endTime: (await latest() + 5*24*3600),
+      allocationMin: toWei('0.1', 'ether'),
+      allocationMax: toWei('5', 'ether'),
+      marketPoint: 5,
+      devPoint: 10,
+      isPrivate: false
     }];
 
     for (let i in sellPools) {
       let p = sellPools[i];
-      await moonFund.addSellPool(p.price, p.cap, p.startTime, p.endTime, {from: deployer});
+      await moonFund.addSellPool(p.title, p.price, p.cap, p.startTime, p.endTime, p.allocationMin,p.allocationMax,p.marketPoint,p.devPoint,p.isPrivate,{from: deployer});
     }
     // await moonFund.addSellPool(288, toWei('100000', 'ether'), parseInt(Date.now()/1000), (parseInt(Date.now()/1000) + 5*24*3600), {from: deployer});
     await moonFund.massUpdateWhitelist(0, toWei('5000', 'ether'), [deployer, alice, bob]);
     await moonFund.massUpdateWhitelist(1, toWei('5', 'ether'), [deployer, alice, bob]);
+
+    await fork.mint(moonFund.address, toWei('10216000', 'ether'));
     
   })
 
   describe('when use moonFund crowdfunding', () => {
-    it('should deposit BNB to get sFORK', async () => {
+    it('should deposit BNB to get FORK', async () => {
       await moonFund.deposit(0, toWei('11', 'ether'), {from: alice, value: toWei('11', 'ether')});
 
       assert.equal(toWei(11*288+'', 'ether'), (await sfork.balanceOf(alice)).toString(), 'alice\'s sfork error ');
       assert.equal(toWei(11*0.85+'', 'ether'), (await wbnb.balanceOf(moonFund.address)).toString());
-      assert.equal(toWei((11*0.15)+'', 'ether'), (await wbnb.balanceOf(deployer)).toString(), 'deployer\' bnb error');
+      assert.equal(toWei(11*0.15+'', 'ether'), (await wbnb.balanceOf(deployer)).toString(), 'deployer\' bnb error');
       assert.equal(toWei('11', 'ether'), (await moonFund.soldOfETH(0)).toString());
       assert.equal(toWei(11*288+'', 'ether'), (await moonFund.sold(0)).toString());
+
+      await moonFund.deposit(1, toWei('4', 'ether'), {from: bob, value: toWei('4', 'ether')});
+      assert.equal(toWei(4*1440+'', 'ether'), (await sfork.balanceOf(bob)).toString(), 'bob\'s sfork error ');
+      assert.equal(toWei((11*0.85 + 0).toString(), 'ether'), (await wbnb.balanceOf(moonFund.address)).toString());
+      assert.equal(toWei((11*0.15 + 4).toString(), 'ether'), (await wbnb.balanceOf(deployer)).toString(), 'deployer\' bnb error');
+    });
+
+    it('should deposit BNB to get FORK public pool when not in whitelist', async () => {
+      await moonFund.deposit(2, toWei('11', 'ether'), {from: alice, value: toWei('11', 'ether')});
+
+      assert.equal(toWei(11*225+'', 'ether'), (await sfork.balanceOf(alice)).toString(), 'alice\'s sfork error ');
+      assert.equal(toWei(11*0.85+'', 'ether'), (await wbnb.balanceOf(moonFund.address)).toString());
+      assert.equal(toWei('11', 'ether'), (await moonFund.soldOfETH(2)).toString());
+      assert.equal(toWei(11*225+'', 'ether'), (await moonFund.sold(2)).toString());
+      assert.equal(toWei((15-11).toString(), 'ether'), (await moonFund.userPendingQuata(2, alice)).toString());
+
     });
 
     it('shold revert when amount > limit', async () => {
-      await truffleAssert.fails(moonFund.deposit(1, toWei('10', 'ether'), {from: bob, value: toWei('10', 'ether')}), null, " white-list amount must > 0");
+      await truffleAssert.fails(moonFund.deposit(1, toWei('15', 'ether'), {from: bob, value: toWei('15', 'ether')}), null, "amount must <= allocationMax");
     });
 
     it('shold revert when amount is smaller then 0.1bnb', async () => {
-      await truffleAssert.fails(moonFund.deposit(0, toWei('0.09', 'ether'), {from: bob, value: toWei('0.09', 'ether')}), null, "amount must > 0.1");
+      await truffleAssert.fails(moonFund.deposit(0, toWei('0.09', 'ether'), {from: bob, value: toWei('0.09', 'ether')}), null, "amount must > allocationMin");
     });
 
     it('shold revert when user is not in whitelist', async () => {
-      await truffleAssert.fails(moonFund.deposit(0, toWei('10', 'ether'), {from: dev, value: toWei('10', 'ether')}), null, " white-list amount must > 0");
+      await truffleAssert.fails(moonFund.deposit(0, toWei('6', 'ether'), {from: dev, value: toWei('6', 'ether')}), null, " white-list amount must > 0");
+    });
+
+    it('shold revert when pool is not start', async () => {
+      await truffleAssert.fails(moonFund.deposit(3, toWei('4', 'ether'), {from: alice, value: toWei('4', 'ether')}), null, "crowdfunding: not start");
     });
 
     // it('should revert when sfork sold out', async()=>{
@@ -90,107 +147,10 @@ contract('MoonFund', async (accounts) => {
     // })
   });
 
-  describe('when setting moonFund', () => {
-    it('should add cash pool', async () => {
-      // transfer $FORK to moonFund after deploy $FORK 
-      await fork.mint(moonFund.address, toWei('1880000', 'ether'));
-      // set fork address
-      await moonFund.setForkAddress(fork.address);
-      // add cash pool
-      await moonFund.addCashPool(50, parseInt((Date.now() / 1000)+ 20));
-      await moonFund.addCashPool(50, parseInt((Date.now() / 1000)+ 100));
-
-      assert.equal(2, (await moonFund.cashPoolLength()));
-    })
-
-    it('should reverts when pool point is full', async () => {
-      // transfer $FORK to moonFund after deploy $FORK 
-      await fork.mint(moonFund.address, toWei('1880000', 'ether'));
-      // set fork address
-      await moonFund.setForkAddress(fork.address);
-      // add cash pool
-      await moonFund.addCashPool(50, parseInt((Date.now() / 1000)+ 20));
-      await moonFund.addCashPool(50, parseInt((Date.now() / 1000)+ 100));
-
-      await truffleAssert.reverts(moonFund.addCashPool(1, parseInt(Date.now() / 1000)+ 200), "add: all haven cashed");
-    })
-  })
-
-  describe("when using cash pool", () => {
-    it('should cash', async () => {
-      // deposit 100 bnb
-      await moonFund.deposit(0,toWei('100', 'ether'), {from: alice, value: toWei('100', 'ether')});
-      // transfer $FORK to moonFund after deploy $FORK 
-      await fork.mint(moonFund.address, toWei('1880000', 'ether'));
-      // set fork address
-      await moonFund.setForkAddress(fork.address);
-      // add cash pool
-      await moonFund.addCashPool(50, parseInt((Date.now() / 1000)+1));
-      await moonFund.addCashPool(20, parseInt((Date.now() / 1000)+ 20));
-      await moonFund.addCashPool(30, parseInt((Date.now() / 1000)+ 100));
-      await sleep(1000);
-      assert.equal(toWei(288*100*0.5+'', 'ether'), (await moonFund.pendingCash(0, alice)).toString());
-
-      await moonFund.cash(0, toWei('100', 'ether'), {from: alice});
-
-      assert.equal(toWei((288*100*0.5-100)+'', 'ether'), (await moonFund.pendingCash(0, alice)).toString());
-
-      // const t = (await moonFund.getCroTime());
-      // console.log(t, t[0]);
-    })
-
-    it("should reverts when cash enable < amount", async () => {
-      // deposit 100 bnb
-      await moonFund.deposit(0,toWei('100', 'ether'), {from: alice, value: toWei('100', 'ether')});
-      // transfer $FORK to moonFund after deploy $FORK 
-      await fork.mint(moonFund.address, toWei('1880000', 'ether'));
-      // set fork address
-      await moonFund.setForkAddress(fork.address, {from: deployer});
-      // add cash pool
-      await moonFund.addCashPool(30, parseInt((Date.now() / 1000)+1));
-      await sleep(1000);
-      // update block.timestamp
-      // await moonFund.setForkAddress(fork.address, {from: deployer});
-
-      assert.equal(toWei(288*100*0.3+'', 'ether'), (await moonFund.pendingCash(0, alice)).toString());
-
-      await truffleAssert.reverts(moonFund.cash(0, toWei((288*100*0.3+1)+'', 'ether'), {from: alice}), "cashing: amount > maxlimit");
-    })
-
-    it("should reverts when cash pool is not start", async() => {
-      // deposit 100 bnb
-      await moonFund.deposit(0, toWei('100', 'ether'), {from: alice, value: toWei('100', 'ether')});
-      // transfer $FORK to moonFund after deploy $FORK 
-      await fork.mint(moonFund.address, toWei('1880000', 'ether'));
-      // set fork address
-      await moonFund.setForkAddress(fork.address);
-      // add cash pool
-      await moonFund.addCashPool(30, parseInt((Date.now() / 1000) + 200));
-      assert.equal(toWei(288*100*0.3+'', 'ether'), (await moonFund.pendingCash(0, alice)).toString());
-
-      await truffleAssert.reverts(moonFund.cash(0, toWei('10', 'ether'), {from: alice}), "cashing: not start");
-    })
-
-    it("should reverts when fork address not set", async() => {
-      // deposit 100 bnb
-      await moonFund.deposit(0, toWei('100', 'ether'), {from: alice, value: toWei('100', 'ether')});
-      // transfer $FORK to moonFund after deploy $FORK 
-      await fork.mint(moonFund.address, toWei('1880000', 'ether'));
-      // add cash pool
-      await moonFund.addCashPool(30, parseInt((Date.now() / 1000) + 200));
-      assert.equal(toWei(288*100*0.3+'', 'ether'), (await moonFund.pendingCash(0, alice)).toString());
-
-      await truffleAssert.reverts(moonFund.cash(0, toWei('10', 'ether'), {from: alice}), "cashing not active");
-    })
-  })
-
   describe("when using toTheMoon", () => {
     it("should toTheMoon", async() => {
       await moonFund.deposit(0, toWei('100', 'ether'), {from: alice, value: toWei('100', 'ether')});
 
-      await moonFund.setForkAddress(fork.address);
-
-      await fork.mint(deployer, toWei('1000', 'ether'));
       // 1. create pair
       await swapFactory.createPair(fork.address, wbnb.address);
       const pair_addr = await swapFactory.getPair(fork.address, wbnb.address);
@@ -218,7 +178,6 @@ contract('MoonFund', async (accounts) => {
     it("should revents when call user is not opreator", async() => {
       await moonFund.deposit(0, toWei('100', 'ether'), {from: alice, value: toWei('100', 'ether')});
 
-      await moonFund.setForkAddress(fork.address);
 
       await fork.mint(deployer, toWei('1000', 'ether'));
       // 1. create pair
@@ -246,7 +205,6 @@ contract('MoonFund', async (accounts) => {
     it("should revents when amount > balance", async() => {
       await moonFund.deposit(0,toWei('100', 'ether'), {from: alice, value: toWei('100', 'ether')});
 
-      await moonFund.setForkAddress(fork.address);
 
       await fork.mint(deployer, toWei('1000', 'ether'));
       // 1. create pair
@@ -276,7 +234,6 @@ contract('MoonFund', async (accounts) => {
     it("should slowDown", async() => {
       await moonFund.deposit(0,toWei('100', 'ether'), {from: alice, value: toWei('100', 'ether')});
 
-      await moonFund.setForkAddress(fork.address);
 
       await fork.mint(deployer, toWei('1000', 'ether'));
       // 1. create pair
@@ -327,7 +284,6 @@ contract('MoonFund', async (accounts) => {
     // it('should withdrawETH', async()=>{
     //   await moonFund.deposit(0,toWei('100', 'ether'), {from: alice, value: toWei('100', 'ether')});
 
-    //   await moonFund.setForkAddress(fork.address);
 
     //   await fork.mint(deployer, toWei('1000', 'ether'));
     //   // 1. create pair
@@ -357,7 +313,6 @@ contract('MoonFund', async (accounts) => {
     // })
     // it('should withdrawFork', async()=>{
     //   await fork.mint(moonFund.address, toWei('1000', 'ether'));
-    //   await moonFund.setForkAddress(fork.address);
     //   await moonFund.withdrawFork(bob, toWei('50', 'ether'));
     //   assert.equal(toWei(1000-50+'', 'ether'), (await fork.balanceOf(moonFund.address)).toString());
     // })
@@ -367,29 +322,6 @@ contract('MoonFund', async (accounts) => {
       await moonFund.deposit(0,toWei('500', 'ether'), {from: bob, value: toWei('500', 'ether')});
 
       await fork.mint(moonFund.address, toWei('1880000', 'ether'));
-      // set fork address
-      await moonFund.setForkAddress(fork.address);
-      // add cash pool
-      await moonFund.addCashPool(50, parseInt((Date.now() / 1000)+ 1));
-      await moonFund.addCashPool(50, parseInt((Date.now() / 1000)+ 5));
-
-      await sleep(1000);
-      // alice cash
-      await moonFund.cash(0, toWei(100*288*0.5+'', 'ether'), {from: alice});
-      assert.equal(toWei('0', 'ether'), (await moonFund.pendingCash(0, alice)).toString());
-      // bob cash
-      await moonFund.cash(0, toWei(500*288*0.5+'', 'ether'), {from: bob});
-      assert.equal(toWei('0', 'ether'), (await moonFund.pendingCash(0, bob)).toString());
-      assert.equal(toWei((1880000-100*288*0.5-500*288*0.5)+'', 'ether'), (await fork.balanceOf(moonFund.address)).toString());
-
-      await sleep(4000);
-      // alice cash
-      await moonFund.cash(1, toWei(100*288*0.5+'', 'ether'), {from: alice});
-      assert.equal(toWei('0', 'ether'), (await moonFund.pendingCash(1, alice)).toString());
-      // bob cash
-      await moonFund.cash(1, toWei(500*288*0.5+'', 'ether'), {from: bob});
-      assert.equal(toWei('0', 'ether'), (await moonFund.pendingCash(1, bob)).toString());
-      assert.equal(toWei((1880000-100*288*0.5*2-500*288*0.5*2)+'', 'ether'), (await fork.balanceOf(moonFund.address)).toString());
 
       await fork.mint(deployer, toWei('1000', 'ether'));
       // 1. create pair
@@ -451,7 +383,6 @@ contract('MoonFund', async (accounts) => {
     })
     it("should withdrawFork with timelock", async()=>{
       await fork.mint(moonFund.address, toWei('1000', 'ether'));
-      await moonFund.setForkAddress(fork.address);
 
       await moonFund.deposit(0,toWei('1000', 'ether'), {from: alice, value: toWei('1000', 'ether')});
       await moonFund.deposit(0,toWei('3000', 'ether'), {from: bob, value: toWei('3000', 'ether')});
